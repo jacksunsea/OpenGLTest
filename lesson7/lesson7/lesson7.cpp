@@ -1,17 +1,18 @@
 /*
  *		This Code Was Created By Jeff Molofee 2000
  *		A HUGE Thanks To Fredric Echols For Cleaning Up
- *		And Optimizing This Code, Making It More Flexible!
+ *		And Optimizing The Base Code, Making It More Flexible!
  *		If You've Found This Code Useful, Please Let Me Know.
  *		Visit My Site At nehe.gamedev.net
- *		Conversion to Visual Studio.NET done by Grant James (ZEUS)
+ *		Conversion to Visual Studio.NET done by GRANT JAMES(ZEUS)
  */
 
 #include <windows.h>		// Header File For Windows
+#include <stdio.h>			// Header File For Standard Input/Output
 #include <gl\gl.h>			// Header File For The OpenGL32 Library
 #include <gl\glu.h>			// Header File For The GLu32 Library
 #include <gl\glaux.h>		// Header File For The Glaux Library
-#include <stdio.h>
+
 HDC			hDC=NULL;		// Private GDI Device Context
 HGLRC		hRC=NULL;		// Permanent Rendering Context
 HWND		hWnd=NULL;		// Holds Our Window Handle
@@ -20,102 +21,92 @@ HINSTANCE	hInstance;		// Holds The Instance Of The Application
 bool	keys[256];			// Array Used For The Keyboard Routine
 bool	active=TRUE;		// Window Active Flag Set To TRUE By Default
 bool	fullscreen=TRUE;	// Fullscreen Flag Set To Fullscreen Mode By Default
+bool	light;				// Lighting ON/OFF ( NEW )
+bool	lp;					// L Pressed? ( NEW )
+bool	fp;					// F Pressed? ( NEW )
 
-BOOL light;
-BOOL lp;
-BOOL fp;
-GLfloat xrot;
-GLfloat yrot;
+GLfloat	xrot;				// X Rotation
+GLfloat	yrot;				// Y Rotation
+GLfloat xspeed;				// X Rotation Speed
+GLfloat yspeed;				// Y Rotation Speed
+GLfloat	z=-5.0f;			// Depth Into The Screen
 
-GLfloat xspeed;
-GLfloat yspeed;
-GLfloat z= -0.5f;		//深入屏幕的距离
+GLfloat LightAmbient[]=		{ 0.5f, 0.5f, 0.5f, 1.0f };
+GLfloat LightDiffuse[]=		{ 1.0f, 1.0f, 1.0f, 1.0f };
+GLfloat LightPosition[]=	{ 0.0f, 0.0f, 2.0f, 1.0f };
 
-GLfloat LightAmbient[] = {0.5f,0.5f,0.5f,1.0f};				//环境光参数
-GLfloat LightDiffuse[] = {1.0f,1.0f,1.0f,1.0f};				//环境光
-GLfloat LightPosition[] = {0.0f, 0.0f,2.0f,1.0f};
-
-GLuint filter;
-GLuint texture[3];
+GLuint	filter;				// Which Filter To Use
+GLuint	texture[3];			// Storage For 3 Textures
 
 LRESULT	CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);	// Declaration For WndProc
-AUX_RGBImageRec *LoadBMP(char *Filename)
-{
-	FILE *File = NULL;
-	if(!Filename)
-	{
-		return NULL;
-	}
-	File = fopen(Filename,"r");
-	if(File)
-	{
-		fclose(File);
-		return auxDIBImageLoad(Filename);
-	}
-	return NULL;
 
-};
-int LoadGLTextures()
+AUX_RGBImageRec *LoadBMP(char *Filename)				// Loads A Bitmap Image
 {
-	int Status = FALSE;
-	AUX_RGBImageRec *TextureImage[1];
-	memset(TextureImage,0,sizeof(void*)*1);
-	if(TextureImage[0] = LoadBMP("Data/Crate.bmp"))
+	FILE *File=NULL;									// File Handle
+
+	if (!Filename)										// Make Sure A Filename Was Given
 	{
-		Status = TRUE;
-		//创建纹理
-		glGenTextures(3, &texture[0]);
-		//创建Nearest滤波贴图
-		glBindTexture(GL_TEXTURE_2D,texture[0]);
-		glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST); 
-		glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST); 
-		glTexImage2D(GL_TEXTURE_2D,
-								0,
-								3,
-								TextureImage[0]->sizeX,
-								TextureImage[0]->sizeY,
-								0,
-								GL_RGB,
-								GL_UNSIGNED_BYTE,
-								TextureImage[0]->data);
-	//创建线性滤波纹理
+		return NULL;									// If Not Return NULL
+	}
+
+	File=fopen(Filename,"r");							// Check To See If The File Exists
+
+	if (File)											// Does The File Exist?
+	{
+		fclose(File);									// Close The Handle
+		return auxDIBImageLoad(Filename);				// Load The Bitmap And Return A Pointer
+	}
+
+	return NULL;										// If Load Failed Return NULL
+}
+
+int LoadGLTextures()									// Load Bitmaps And Convert To Textures
+{
+	int Status=FALSE;									// Status Indicator
+
+	AUX_RGBImageRec *TextureImage[1];					// Create Storage Space For The Texture
+
+	memset(TextureImage,0,sizeof(void *)*1);           	// Set The Pointer To NULL
+
+	// Load The Bitmap, Check For Errors, If Bitmap's Not Found Quit
+	if (TextureImage[0]=LoadBMP("Data/Crate.bmp"))
+	{
+		Status=TRUE;									// Set The Status To TRUE
+
+		glGenTextures(3, &texture[0]);					// Create Three Textures
+
+		// Create Nearest Filtered Texture
+		glBindTexture(GL_TEXTURE_2D, texture[0]);
+		glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);
+		glTexImage2D(GL_TEXTURE_2D, 0, 3, TextureImage[0]->sizeX, TextureImage[0]->sizeY, 0, GL_RGB, GL_UNSIGNED_BYTE, TextureImage[0]->data);
+
+		// Create Linear Filtered Texture
 		glBindTexture(GL_TEXTURE_2D, texture[1]);
 		glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
-		glTexImage2D(GL_TEXTURE_2D,
-			0,
-			3,
-			TextureImage[0]->sizeX,
-			TextureImage[0]->sizeY,
-			0,
-			GL_RGB,
-			GL_UNSIGNED_BYTE,
-			TextureImage[0]->data);
-	//创建mipmapped纹理
-		glBindTexture(GL_TEXTURE_2D,texture[2]);
-		glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR_MIPMAP_NEAREST); 
-		glTexImage2D(GL_TEXTURE_2D,
-			0,
-			3,
-			TextureImage[0]->sizeX,
-			TextureImage[0]->sizeY,
-			0,
-			GL_RGB,
-			GL_UNSIGNED_BYTE,
-			TextureImage[0]->data);
+		glTexImage2D(GL_TEXTURE_2D, 0, 3, TextureImage[0]->sizeX, TextureImage[0]->sizeY, 0, GL_RGB, GL_UNSIGNED_BYTE, TextureImage[0]->data);
 
-		if(TextureImage[0])
-		{
-			if(TextureImage[0]->data)
-			{
-				free(TextureImage[0]->data);
-			}
-			free(TextureImage[0]);
-		}
+		// Create MipMapped Texture
+		glBindTexture(GL_TEXTURE_2D, texture[2]);
+		glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR_MIPMAP_NEAREST);
+		gluBuild2DMipmaps(GL_TEXTURE_2D, 3, TextureImage[0]->sizeX, TextureImage[0]->sizeY, GL_RGB, GL_UNSIGNED_BYTE, TextureImage[0]->data);
 	}
-	return Status;
+
+	if (TextureImage[0])								// If Texture Exists
+	{
+		if (TextureImage[0]->data)						// If Texture Image Exists
+		{
+			free(TextureImage[0]->data);				// Free The Texture Image Memory
+		}
+
+		free(TextureImage[0]);							// Free The Image Structure
+	}
+
+	return Status;										// Return The Status
 }
+
 GLvoid ReSizeGLScene(GLsizei width, GLsizei height)		// Resize And Initialize The GL Window
 {
 	if (height==0)										// Prevent A Divide By Zero By
@@ -137,78 +128,79 @@ GLvoid ReSizeGLScene(GLsizei width, GLsizei height)		// Resize And Initialize Th
 
 int InitGL(GLvoid)										// All Setup For OpenGL Goes Here
 {
-	if(!LoadGLTextures())
+	if (!LoadGLTextures())								// Jump To Texture Loading Routine
 	{
-		return FALSE;
+		return FALSE;									// If Texture Didn't Load Return FALSE
 	}
-	glEnable(GL_TEXTURE_2D);
+
+	glEnable(GL_TEXTURE_2D);							// Enable Texture Mapping
 	glShadeModel(GL_SMOOTH);							// Enable Smooth Shading
 	glClearColor(0.0f, 0.0f, 0.0f, 0.5f);				// Black Background
 	glClearDepth(1.0f);									// Depth Buffer Setup
 	glEnable(GL_DEPTH_TEST);							// Enables Depth Testing
 	glDepthFunc(GL_LEQUAL);								// The Type Of Depth Testing To Do
 	glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST);	// Really Nice Perspective Calculations
-	glLightfv(GL_LIGHT1,GL_AMBIENT,LightAmbient);
-	glLightfv(GL_LIGHT1,GL_DIFFUSE,LightDiffuse);
-	glLightfv(GL_LIGHT1,GL_POSITION,LightPosition);
-	glEnable(GL_LIGHT1);
 
+	glLightfv(GL_LIGHT1, GL_AMBIENT, LightAmbient);		// Setup The Ambient Light
+	glLightfv(GL_LIGHT1, GL_DIFFUSE, LightDiffuse);		// Setup The Diffuse Light
+	glLightfv(GL_LIGHT1, GL_POSITION,LightPosition);	// Position The Light
+	glEnable(GL_LIGHT1);								// Enable Light One
 	return TRUE;										// Initialization Went OK
 }
 
 int DrawGLScene(GLvoid)									// Here's Where We Do All The Drawing
 {
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);	// Clear Screen And Depth Buffer
-	glLoadIdentity();									// Reset The Current Modelview Matrix
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);	// Clear The Screen And The Depth Buffer
+	glLoadIdentity();									// Reset The View
 	glTranslatef(0.0f,0.0f,z);
+
 	glRotatef(xrot,1.0f,0.0f,0.0f);
 	glRotatef(yrot,0.0f,1.0f,0.0f);
-	
-	glBindTexture(GL_TEXTURE_2D,texture[filter]);
 
-	// 前侧面
-	glNormal3f( 0.0f, 0.0f, 1.0f);					// 法线指向观察者
-	glTexCoord2f(0.0f, 0.0f); glVertex3f(-1.0f, -1.0f,  1.0f);	
-	glTexCoord2f(1.0f, 0.0f); glVertex3f( 1.0f, -1.0f,  1.0f);	
-	glTexCoord2f(1.0f, 1.0f); glVertex3f( 1.0f,  1.0f,  1.0f);	
-	glTexCoord2f(0.0f, 1.0f); glVertex3f(-1.0f,  1.0f,  1.0f);	
-	// 后侧面
-	glNormal3f( 0.0f, 0.0f,-1.0f);					// 法线背向观察者
-	glTexCoord2f(1.0f, 0.0f); glVertex3f(-1.0f, -1.0f, -1.0f);	
-	glTexCoord2f(1.0f, 1.0f); glVertex3f(-1.0f,  1.0f, -1.0f);	
-	glTexCoord2f(0.0f, 1.0f); glVertex3f( 1.0f,  1.0f, -1.0f);	
-	glTexCoord2f(0.0f, 0.0f); glVertex3f( 1.0f, -1.0f, -1.0f);	
-	// 顶面
-	glNormal3f( 0.0f, 1.0f, 0.0f);					// 法线向上
-	glTexCoord2f(0.0f, 1.0f); glVertex3f(-1.0f,  1.0f, -1.0f);	
-	glTexCoord2f(0.0f, 0.0f); glVertex3f(-1.0f,  1.0f,  1.0f);	
-	glTexCoord2f(1.0f, 0.0f); glVertex3f( 1.0f,  1.0f,  1.0f);	
-	glTexCoord2f(1.0f, 1.0f); glVertex3f( 1.0f,  1.0f, -1.0f);	
-	// 底面
-	glNormal3f( 0.0f,-1.0f, 0.0f);					// 法线朝下
-	glTexCoord2f(1.0f, 1.0f); glVertex3f(-1.0f, -1.0f, -1.0f);	
-	glTexCoord2f(0.0f, 1.0f); glVertex3f( 1.0f, -1.0f, -1.0f);	
-	glTexCoord2f(0.0f, 0.0f); glVertex3f( 1.0f, -1.0f,  1.0f);	
-	glTexCoord2f(1.0f, 0.0f); glVertex3f(-1.0f, -1.0f,  1.0f);	
-	// 右侧面
-	glNormal3f( 1.0f, 0.0f, 0.0f);					// 法线朝右
-	glTexCoord2f(1.0f, 0.0f); glVertex3f( 1.0f, -1.0f, -1.0f);	
-	glTexCoord2f(1.0f, 1.0f); glVertex3f( 1.0f,  1.0f, -1.0f);	
-	glTexCoord2f(0.0f, 1.0f); glVertex3f( 1.0f,  1.0f,  1.0f);	
-	glTexCoord2f(0.0f, 0.0f); glVertex3f( 1.0f, -1.0f,  1.0f);	
-	// 左侧面
-	glNormal3f(-1.0f, 0.0f, 0.0f);					// 法线朝左
-	glTexCoord2f(0.0f, 0.0f); glVertex3f(-1.0f, -1.0f, -1.0f);	
-	glTexCoord2f(1.0f, 0.0f); glVertex3f(-1.0f, -1.0f,  1.0f);	
-	glTexCoord2f(1.0f, 1.0f); glVertex3f(-1.0f,  1.0f,  1.0f);	
-	glTexCoord2f(0.0f, 1.0f); glVertex3f(-1.0f,  1.0f, -1.0f);	
-	glEnd();								// 四边形绘制结束
-	xrot += xspeed;
-	yrot += yspeed;
-	
-	
+	glBindTexture(GL_TEXTURE_2D, texture[filter]);
 
-	return TRUE;										// Everything Went OK
+	glBegin(GL_QUADS);
+		// Front Face
+		glNormal3f( 0.0f, 0.0f, 1.0f);
+		glTexCoord2f(0.0f, 0.0f); glVertex3f(-1.0f, -1.0f,  1.0f);
+		glTexCoord2f(1.0f, 0.0f); glVertex3f( 1.0f, -1.0f,  1.0f);
+		glTexCoord2f(1.0f, 1.0f); glVertex3f( 1.0f,  1.0f,  1.0f);
+		glTexCoord2f(0.0f, 1.0f); glVertex3f(-1.0f,  1.0f,  1.0f);
+		// Back Face
+		glNormal3f( 0.0f, 0.0f,-1.0f);
+		glTexCoord2f(1.0f, 0.0f); glVertex3f(-1.0f, -1.0f, -1.0f);
+		glTexCoord2f(1.0f, 1.0f); glVertex3f(-1.0f,  1.0f, -1.0f);
+		glTexCoord2f(0.0f, 1.0f); glVertex3f( 1.0f,  1.0f, -1.0f);
+		glTexCoord2f(0.0f, 0.0f); glVertex3f( 1.0f, -1.0f, -1.0f);
+		// Top Face
+		glNormal3f( 0.0f, 1.0f, 0.0f);
+		glTexCoord2f(0.0f, 1.0f); glVertex3f(-1.0f,  1.0f, -1.0f);
+		glTexCoord2f(0.0f, 0.0f); glVertex3f(-1.0f,  1.0f,  1.0f);
+		glTexCoord2f(1.0f, 0.0f); glVertex3f( 1.0f,  1.0f,  1.0f);
+		glTexCoord2f(1.0f, 1.0f); glVertex3f( 1.0f,  1.0f, -1.0f);
+		// Bottom Face
+		glNormal3f( 0.0f,-1.0f, 0.0f);
+		glTexCoord2f(1.0f, 1.0f); glVertex3f(-1.0f, -1.0f, -1.0f);
+		glTexCoord2f(0.0f, 1.0f); glVertex3f( 1.0f, -1.0f, -1.0f);
+		glTexCoord2f(0.0f, 0.0f); glVertex3f( 1.0f, -1.0f,  1.0f);
+		glTexCoord2f(1.0f, 0.0f); glVertex3f(-1.0f, -1.0f,  1.0f);
+		// Right face
+		glNormal3f( 1.0f, 0.0f, 0.0f);
+		glTexCoord2f(1.0f, 0.0f); glVertex3f( 1.0f, -1.0f, -1.0f);
+		glTexCoord2f(1.0f, 1.0f); glVertex3f( 1.0f,  1.0f, -1.0f);
+		glTexCoord2f(0.0f, 1.0f); glVertex3f( 1.0f,  1.0f,  1.0f);
+		glTexCoord2f(0.0f, 0.0f); glVertex3f( 1.0f, -1.0f,  1.0f);
+		// Left Face
+		glNormal3f(-1.0f, 0.0f, 0.0f);
+		glTexCoord2f(0.0f, 0.0f); glVertex3f(-1.0f, -1.0f, -1.0f);
+		glTexCoord2f(1.0f, 0.0f); glVertex3f(-1.0f, -1.0f,  1.0f);
+		glTexCoord2f(1.0f, 1.0f); glVertex3f(-1.0f,  1.0f,  1.0f);
+		glTexCoord2f(0.0f, 1.0f); glVertex3f(-1.0f,  1.0f, -1.0f);
+	glEnd();
+
+	xrot+=xspeed;
+	yrot+=yspeed;
+	return TRUE;										// Keep Going
 }
 
 GLvoid KillGLWindow(GLvoid)								// Properly Kill The Window
@@ -500,7 +492,7 @@ int WINAPI WinMain(	HINSTANCE	hInstance,			// Instance
 	}
 
 	// Create Our OpenGL Window
-	if (!CreateGLWindow("NeHe's OpenGL Framework",640,480,16,fullscreen))
+	if (!CreateGLWindow("NeHe's Textures, Lighting & Keyboard Tutorial",640,480,16,fullscreen))
 	{
 		return 0;									// Quit If Window Was Not Created
 	}
@@ -522,57 +514,78 @@ int WINAPI WinMain(	HINSTANCE	hInstance,			// Instance
 		else										// If There Are No Messages
 		{
 			// Draw The Scene.  Watch For ESC Key And Quit Messages From DrawGLScene()
-			if (active)								// Program Active?
+			if ((active && !DrawGLScene()) || keys[VK_ESCAPE])	// Active?  Was There A Quit Received?
 			{
-				if (keys[VK_ESCAPE])				// Was ESC Pressed?
-				{
-					done=TRUE;						// ESC Signalled A Quit
-				}
-				else								// Not Time To Quit, Update Screen
-				{
-					DrawGLScene();					// Draw The Scene
-					SwapBuffers(hDC);				// Swap Buffers (Double Buffering)
-					if(keys['L'] && !lp)
-					{
-						lp = TRUE;
-						light = !light;
-						if(!light)
-						{
-							glDisable(GL_LIGHTING);
-						}else
-						{
-							glEnable(GL_LIGHTING);
-						}
-					}
-					if (!keys['L'])					// L键松开了么?
-					{
-						lp=FALSE;				// 若是，则将lp设为FALSE
-					}
-					if (keys['F'] && !fp)				// F键按下了么?
-					{
-						fp=TRUE;				// fp 设为 TRUE
-						filter+=1;				// filter的值加一
-						if (filter>2)				// 大于2了么?
-						{
-							filter=0;			// 若是重置为0
-						}
-					}
-					if (!keys['F'])					// F键放开了么?
-					{
-						fp=FALSE;				// 若是fp设为FALSE
-					}
-				}
+				done=TRUE;							// ESC or DrawGLScene Signalled A Quit
 			}
-
-			if (keys[VK_F1])						// Is F1 Being Pressed?
+			else									// Not Time To Quit, Update Screen
 			{
-				keys[VK_F1]=FALSE;					// If So Make Key FALSE
-				KillGLWindow();						// Kill Our Current Window
-				fullscreen=!fullscreen;				// Toggle Fullscreen / Windowed Mode
-				// Recreate Our OpenGL Window
-				if (!CreateGLWindow("NeHe's OpenGL Framework",640,480,16,fullscreen))
+				SwapBuffers(hDC);					// Swap Buffers (Double Buffering)
+				if (keys['L'] && !lp)
 				{
-					return 0;						// Quit If Window Was Not Created
+					lp=TRUE;
+					light=!light;
+					if (!light)
+					{
+						glDisable(GL_LIGHTING);
+					}
+					else
+					{
+						glEnable(GL_LIGHTING);
+					}
+				}
+				if (!keys['L'])
+				{
+					lp=FALSE;
+				}
+				if (keys['F'] && !fp)
+				{
+					fp=TRUE;
+					filter+=1;
+					if (filter>2)
+					{
+						filter=0;
+					}
+				}
+				if (!keys['F'])
+				{
+					fp=FALSE;
+				}
+				if (keys[VK_PRIOR])
+				{
+					z-=0.02f;
+				}
+				if (keys[VK_NEXT])
+				{
+					z+=0.02f;
+				}
+				if (keys[VK_UP])
+				{
+					xspeed-=0.01f;
+				}
+				if (keys[VK_DOWN])
+				{
+					xspeed+=0.01f;
+				}
+				if (keys[VK_RIGHT])
+				{
+					yspeed+=0.01f;
+				}
+				if (keys[VK_LEFT])
+				{
+					yspeed-=0.01f;
+				}
+
+				if (keys[VK_F1])						// Is F1 Being Pressed?
+				{
+					keys[VK_F1]=FALSE;					// If So Make Key FALSE
+					KillGLWindow();						// Kill Our Current Window
+					fullscreen=!fullscreen;				// Toggle Fullscreen / Windowed Mode
+					// Recreate Our OpenGL Window
+					if (!CreateGLWindow("NeHe's Textures, Lighting & Keyboard Tutorial",640,480,16,fullscreen))
+					{
+						return 0;						// Quit If Window Was Not Created
+					}
 				}
 			}
 		}
